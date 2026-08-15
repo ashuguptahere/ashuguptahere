@@ -1,0 +1,51 @@
+name: Sync README from ashuguptahere.github.io
+
+# Pull-based on purpose. Pushing from the site repo into this one would need a
+# Personal Access Token stored as a secret, because a workflow's GITHUB_TOKEN
+# can only write to its own repository. Fetching the public raw file from here
+# instead uses this repo's own token and needs no secret at all.
+on:
+  schedule:
+    # Every 6 hours.
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-readme
+  cancel-in-progress: true
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch README from the site repo
+        run: |
+          set -euo pipefail
+          curl -fsSL \
+            https://raw.githubusercontent.com/ashuguptahere/ashuguptahere.github.io/main/README.md \
+            -o README.next
+
+          # The site README links the PDF relative to its own repo root, which
+          # would 404 from a profile page. Point it at the published site.
+          sed -i 's#](Resume_#](https://ashuguptahere.github.io/Resume_#g' README.next
+
+          test -s README.next
+          mv README.next README.md
+
+      - name: Commit if changed
+        run: |
+          set -euo pipefail
+          if git diff --quiet -- README.md; then
+            echo "README already up to date."
+            exit 0
+          fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add README.md
+          git commit -m "chore: sync README from ashuguptahere.github.io"
+          git push
